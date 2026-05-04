@@ -1245,7 +1245,7 @@ function editRepair(id) {
   if(!r){ alert('ไม่พบรายการ'); return; }
   const branches = getBranches();
   const bOpts = branches.map(b=>`<option value="${b.name}" data-zone="${b.zone||''}" ${b.name===r.branch?'selected':''}>${b.name}</option>`).join('');
-  const types = ['ระบบไฟฟ้า','ระบบประปา','เครื่องปรับอากาศ','เฟอร์นิเจอร์','อาคารสถานที่','อื่นๆ'];
+  const types = ['ระบบไฟฟ้า','ระบบประปา','เครื่องปรับอากาศ','ป้าย,ม่านบังแดด','อาคารสถานที่','อื่นๆ'];
   const tOpts = types.map(t=>`<option value="${t}" ${t===r.repairType?'selected':''}>${t}</option>`).join('');
 
   const m = mkModal('✏️ แก้ไขรายการ', `
