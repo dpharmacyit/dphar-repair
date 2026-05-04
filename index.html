@@ -401,15 +401,15 @@ table.t tr:hover td{background:var(--bg)}
           <option value="กำลังดำเนินการ">กำลังดำเนินการ</option>
           <option value="เสร็จสิ้น">เสร็จสิ้น</option>
         </select>
-         </select>
-    <select id="atF" onchange="drawAdminTable()">
-      <option value="">ทุกประเภท</option>
-      <option value="ระบบไฟฟ้า">ระบบไฟฟ้า</option>
-      <option value="ระบบประปา">ระบบประปา</option>
-      <option value="เครื่องปรับอากาศ">เครื่องปรับอากาศ</option>
-      <option value="อาคารสถานที่">อาคารสถานที่</option>
-      <option value="ป้าย,ม่านบังแดด">ป้าย,ม่านบังแดด</option>
-      <option value="อื่นๆ">อื่นๆ</option>
+        <select id="atF" onchange="drawAdminTable()">
+          <option value="">ทุกประเภท</option>
+          <option value="ระบบไฟฟ้า">ระบบไฟฟ้า</option>
+          <option value="ระบบประปา">ระบบประปา</option>
+          <option value="เครื่องปรับอากาศ">เครื่องปรับอากาศ</option>
+          <option value="ป้าย,ม่านบังแดด">ป้าย,ม่านบังแดด</option>
+          <option value="อาคารสถานที่">อาคารสถานที่</option>
+          <option value="อื่นๆ">อื่นๆ</option>
+        </select>
         <button class="btn btn-s btn-sm" onclick="loadAdminAll()">🔄 รีเฟรช</button>
       </div>
       <div class="tscroll">
@@ -513,16 +513,16 @@ table.t tr:hover td{background:var(--bg)}
 // ============================================================
 // CONFIG — ใส่ Web App URL ที่นี่
 // ============================================================
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxsfjn7ZhueAjxmfi8s8Z0D7CEOWZH36vmyAOcDu0ZOUel64VA93NYkWpXTxgWP1wwl/exec';
+const WEBAPP_URL = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 
 // ============================================================
 // EMBEDDED USERS (รหัสผ่านถูก hash)
 // ============================================================
 const SALT = 'DPHAR_SALT_2025';
 const USERS = [
-  // ADMIN / 
+  // ADMIN / admindphar
   {username:'ADMIN', passhash:'9a3ca4a0bc1bbbcc86e08e1f4b4ef2d6cf2974d5037c95663bee325cca4b59ba', role:'Admin'},
-  // MA / 
+  // MA / 12345678
   {username:'MA',    passhash:'2ee1a3e2f0268a4535a4b45ca70295348d6320e0f94fc56937ab712b22676961', role:'Technician'},
 ];
 
@@ -1183,10 +1183,12 @@ function drawAdminTable() {
   const zF = document.getElementById('azF').value;
   const bF = document.getElementById('abF').value;
   const sF = document.getElementById('asF').value;
+  const tF = document.getElementById('atF').value;
   let rows = [...getRepairs()].reverse();
   if(zF) rows = rows.filter(r=>r.zone===zF);
   if(bF) rows = rows.filter(r=>r.branch===bF);
   if(sF) rows = rows.filter(r=>r.status===sF);
+  if(tF) rows = rows.filter(r=>r.repairType===tF);
 
   const tb = document.getElementById('aBody');
   tb.innerHTML = '';
