@@ -91,7 +91,7 @@ body{
 .alert-er{background:var(--danger-bg);color:var(--danger);border:1px solid #FCA5A5}
 
 /* ====== TABLE ====== */
-.tscroll{overflow-x:auto;-kit-overflow-scrolling:touch}
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table.t{width:100%;border-collapse:collapse;font-size:13px}
 table.t th{
   background:var(--bg);color:var(--text);
@@ -513,7 +513,7 @@ table.t tr:hover td{background:var(--bg)}
 // ============================================================
 // CONFIG — ใส่ Web App URL ที่นี่
 // ============================================================
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycby95yz8UVZB5c6NSDmBzDyW40SKkPk81v2B2bZKvz8E-Er-0IX0wuaZVtdLmD3fQ-ew/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxsfjn7ZhueAjxmfi8s8Z0D7CEOWZH36vmyAOcDu0ZOUel64VA93NYkWpXTxgWP1wwl/exec';
 
 // ============================================================
 // EMBEDDED USERS (รหัสผ่านถูก hash)
@@ -522,7 +522,7 @@ const SALT = 'DPHAR_SALT_2025';
 const USERS = [
   
   {username:'ADMIN', passhash:'9a3ca4a0bc1bbbcc86e08e1f4b4ef2d6cf2974d5037c95663bee325cca4b59ba', role:'Admin'},
-  
+ 
   {username:'MA',    passhash:'2ee1a3e2f0268a4535a4b45ca70295348d6320e0f94fc56937ab712b22676961', role:'Technician'},
 ];
 
@@ -1487,22 +1487,95 @@ function openMedia(repairId) {
 
   const grid = document.getElementById('modalGrid');
   grid.innerHTML = '';
+
   r.media.forEach((f,i) => {
     const src  = f.url || f.data || '';
     const name = f.name || `ไฟล์ ${i+1}`;
     const type = f.type || '';
+    const nameLower = name.toLowerCase();
+
+    // ตรวจสอบว่าเป็นรูปหรือวิดีโอ
+    const isImage = type.startsWith('image/')
+      || src.startsWith('data:image')
+      || nameLower.match(/\.(jpg|jpeg|png|gif|webp|heic|heif|bmp|tiff|tif)$/);
+
+    const isVideo = type.startsWith('video/')
+      || nameLower.match(/\.(mp4|mov|avi|mkv|webm|m4v|3gp|wmv|flv)$/);
+
     const c = document.createElement('div');
-    c.style = 'border-radius:10px;overflow:hidden;border:1px solid var(--border)';
-    if(type.startsWith('image/') || src.startsWith('data:image') || src.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
-      c.innerHTML = `<a href="${src}" target="_blank"><img src="${src}" style="width:100%;height:140px;object-fit:cover;display:block" loading="lazy"></a>
-        <div style="padding:5px 8px;font-size:12px;color:var(--text-soft)">${name}</div>
-        <a href="${src}" target="_blank" style="display:block;text-align:center;padding:6px;background:var(--primary);color:white;font-size:13px;text-decoration:none">🔗 เปิดดูเต็ม</a>`;
+    c.style = 'border-radius:10px;overflow:hidden;border:1px solid var(--border);background:var(--bg)';
+
+    if(isImage) {
+      const isHeic = nameLower.match(/\.(heic|heif)$/);
+      if(isHeic) {
+        // HEIC — browser ส่วนใหญ่ไม่รองรับ preview ตรงๆ → ลิงก์เปิดใน Drive
+        c.innerHTML = `
+          <div style="padding:24px;text-align:center">
+            <div style="font-size:2.5em">🖼️</div>
+            <div style="font-size:12px;color:var(--text-soft);margin-top:6px">HEIC Image</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${name}</div>
+          </div>
+          <a href="${src}" target="_blank"
+            style="display:block;text-align:center;padding:8px;background:var(--primary);color:white;font-size:13px;text-decoration:none">
+            🔗 เปิดดูใน Drive
+          </a>`;
+      } else {
+        // JPG/PNG/WEBP — แสดง preview ได้เลย
+        c.innerHTML = `
+          <a href="${src}" target="_blank">
+            <img src="${src}"
+              style="width:100%;height:150px;object-fit:cover;display:block"
+              loading="lazy"
+              onerror="this.parentElement.outerHTML='<div style=padding:20px;text-align:center>🖼️<br><small>${name}</small></div>'">
+          </a>
+          <div style="padding:5px 8px;font-size:12px;color:var(--text-soft)">${name}</div>
+          <a href="${src}" target="_blank"
+            style="display:block;text-align:center;padding:6px;background:var(--primary);color:white;font-size:13px;text-decoration:none">
+            🔗 เปิดดูเต็ม
+          </a>`;
+      }
+    } else if(isVideo) {
+      // VDO — แสดง player ใน modal ได้เลย (ถ้าเป็น Drive URL อาจต้องเปิดแยก)
+      const isDriveUrl = src.includes('drive.google.com');
+      if(isDriveUrl) {
+        // Drive URL → ต้องเปิด tab ใหม่ (Drive ไม่ allow embed ตรง)
+        c.innerHTML = `
+          <div style="padding:24px;text-align:center">
+            <div style="font-size:2.5em">🎬</div>
+            <div style="font-size:12px;color:var(--text-soft);margin-top:6px">วิดีโอ</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${name}</div>
+          </div>
+          <a href="${src}" target="_blank"
+            style="display:block;text-align:center;padding:8px;background:#1F2937;color:white;font-size:13px;text-decoration:none">
+            ▶️ เปิดวิดีโอใน Drive
+          </a>`;
+      } else {
+        // Base64 / direct URL → ใช้ <video> tag เลย
+        c.innerHTML = `
+          <video controls style="width:100%;max-height:200px;display:block;background:#000">
+            <source src="${src}" type="${type||'video/mp4'}">
+            <p style="padding:10px;text-align:center">
+              <a href="${src}" target="_blank">คลิกเปิดวิดีโอ</a>
+            </p>
+          </video>
+          <div style="padding:5px 8px;font-size:12px;color:var(--text-soft)">${name}</div>`;
+      }
     } else {
-      c.innerHTML = `<div style="padding:20px;text-align:center">🎬<br><small>${name}</small></div>
-        <a href="${src}" target="_blank" style="display:block;text-align:center;padding:6px;background:var(--primary);color:white;font-size:13px;text-decoration:none">▶️ เปิดวิดีโอ</a>`;
+      // ไฟล์ที่ระบุประเภทไม่ได้ → ปุ่มเปิด
+      c.innerHTML = `
+        <div style="padding:24px;text-align:center">
+          <div style="font-size:2.5em">📎</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${name}</div>
+        </div>
+        <a href="${src}" target="_blank"
+          style="display:block;text-align:center;padding:8px;background:var(--primary);color:white;font-size:13px;text-decoration:none">
+          🔗 เปิดไฟล์
+        </a>`;
     }
+
     grid.appendChild(c);
   });
+
   document.getElementById('mediaModal').classList.remove('hidden');
 }
 
