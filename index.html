@@ -1004,6 +1004,7 @@ function drawTechTable() {
   const bF = document.getElementById('tbF').value;
   const sF = document.getElementById('tsF').value;
   let rows = getRepairs();
+  if(!sF) rows = rows.filter(r => r.status !== 'เสร็จสิ้น');
   if(zF) rows = rows.filter(r=>r.zone===zF);
   if(bF) rows = rows.filter(r=>r.branch===bF);
   if(sF) rows = rows.filter(r=>r.status===sF);
