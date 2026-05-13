@@ -982,13 +982,13 @@ function fmtDate(s) {
 // ============================================================
 // TECH VIEW
 // ============================================================
-async function refreshTech(btn) {
-  if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังโหลด...'; }
-  try {
-    await loadTechView();
-  } finally {
-    if(btn){ btn.disabled=false; btn.textContent='🔄 รีเฟรช'; }
-  }
+async function loadTechView() {
+  await syncRepairs();
+  await syncBranches();
+  await syncZones();
+  fillDropdowns();
+  drawTechStats();
+  drawTechTable();
 }
 
 function drawTechStats() {
