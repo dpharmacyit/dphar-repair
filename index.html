@@ -150,6 +150,15 @@ table.t tr:hover td{background:var(--bg)}
 .modal-bg{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal-box{background:white;border-radius:12px;max-width:920px;width:100%;max-height:92vh;overflow-y:auto;padding:24px;position:relative}
 
+/* ====== OVERDUE ALERTS ====== */
+.overdue-row td{background:#FEF2F2!important;border-bottom-color:#FCA5A5!important}
+.overdue-row:hover td{background:#FEE2E2!important}
+.overdue-badge{display:inline-flex;align-items:center;gap:4px;background:var(--danger-bg);color:var(--danger);border:1px solid #FCA5A5;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:800;margin-top:4px;white-space:nowrap}
+.overdue-inline{display:flex;flex-direction:column;gap:3px}
+.overdue-popup-list{display:grid;gap:8px;max-height:55vh;overflow:auto;margin:12px 0}
+.overdue-popup-item{border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;padding:10px 12px}
+.overdue-popup-item strong{color:var(--danger)}
+
 /* ====== CHARTS ====== */
 .chartgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:18px}
 .chartbox{background:white;border-radius:10px;padding:18px;border:1px solid var(--border)}
@@ -978,6 +987,53 @@ function parseDate(s) {
 function fmtDate(s) {
   return parseDate(s).toLocaleString('th-TH',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 }
+
+
+function repairAgeDays(r) {
+  const d = parseDate(r && r.date);
+  if(!d || isNaN(d)) return 0;
+  const ms = Date.now() - d.getTime();
+  return Math.max(0, Math.floor(ms / (1000*60*60*24)));
+}
+
+function isOverdueRepair(r) {
+  return r && r.status !== 'เสร็จสิ้น' && repairAgeDays(r) > 30;
+}
+
+function overdueBadge(r) {
+  if(!isOverdueRepair(r)) return '';
+  return `<span class="overdue-badge">⚠️ เกิน 1 เดือน (${repairAgeDays(r)} วัน)</span>`;
+}
+
+function showOverduePopup(viewName) {
+  const overdue = getRepairs()
+    .filter(isOverdueRepair)
+    .sort((a,b) => repairAgeDays(b) - repairAgeDays(a));
+  if(!overdue.length) return;
+
+  const ids = overdue.map(r => r.id).join('|');
+  const todayKey = new Date().toISOString().slice(0,10);
+  const key = `overduePopup_${viewName}_${todayKey}_${ids}`;
+  if(sessionStorage.getItem(key)) return;
+  sessionStorage.setItem(key, '1');
+
+  const items = overdue.slice(0,12).map(r => `
+    <div class="overdue-popup-item">
+      <div><strong>${r.branch || 'ไม่ระบุสาขา'}</strong> ${overdueBadge(r)}</div>
+      <div class="text-sm" style="margin-top:4px">${r.repairType || 'ไม่ระบุประเภท'} · สถานะ: ${r.status || 'ไม่ระบุ'} · ผู้แจ้ง: ${r.reporterName || '-'}</div>
+      <div class="text-sm text-soft" style="margin-top:3px">วันที่แจ้ง: ${fmtDate(r.date)}</div>
+      <div class="text-sm" style="margin-top:5px">${r.problemDetail || '-'}</div>
+    </div>`).join('');
+  const more = overdue.length > 12 ? `<p class="text-sm text-soft">และมีรายการอื่นอีก ${overdue.length-12} รายการ — ดูทั้งหมดได้ในตารางรายการซ่อม</p>` : '';
+
+  const modal = mkModal('⚠️ แจ้งเตือนรายการค้างเกิน 1 เดือน', `
+    <div class="alert alert-er">มีรายการแจ้งซ่อมที่ยังไม่ปิดงานเกิน 1 เดือน จำนวน <strong>${overdue.length}</strong> รายการ กรุณาตรวจสอบและอัพเดทสถานะให้สมบูรณ์</div>
+    <div class="overdue-popup-list">${items}</div>
+    ${more}
+    <button class="btn btn-p btn-block" onclick="this.closest('[data-modal]').remove()">รับทราบ</button>
+  `);
+  document.body.appendChild(modal);
+}
 async function refreshTech(btn) {
   if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังโหลด...'; }
   try {
@@ -996,6 +1052,7 @@ async function loadTechView() {
   fillDropdowns();
   drawTechStats();
   drawTechTable();
+  showOverduePopup('tech');
 }
 
 function drawTechStats() {
@@ -1032,6 +1089,8 @@ function drawTechTable() {
     const uCls = r.urgencyLevel==='สูง'?'u-h':r.urgencyLevel==='ปานกลาง'?'u-m':'u-l';
     const sCls = r.status==='กำลังดำเนินการ'?'b-prog':r.status==='เสร็จสิ้น'?'b-done':'b-pend';
     const mBtn = r.media&&r.media.length ? `<button class="btn btn-s btn-sm" onclick="openMedia('${r.id}')">📎(${r.media.length})</button>` : '–';
+    const isOd = isOverdueRepair(r);
+    const odBadge = overdueBadge(r);
 
     let ctrl = '';
     if(r.status === 'เสร็จสิ้น') {
@@ -1048,13 +1107,14 @@ function drawTechTable() {
       : '–';
 
     const tr = document.createElement('tr');
+    if(isOd) tr.classList.add('overdue-row');
     tr.innerHTML = `
-      <td style="white-space:nowrap;font-size:12px">${fmtDate(r.date)}</td>
+      <td style="white-space:nowrap;font-size:12px"><div class="overdue-inline"><span>${fmtDate(r.date)}</span>${odBadge}</div></td>
       <td><span class="badge b-zone">${r.zone||'–'}</span></td>
       <td><strong>${r.branch||'–'}</strong></td>
       <td>${r.reporterName||'–'}</td>
       <td>${r.repairType||'–'}</td>
-      <td style="max-width:180px">${r.problemDetail||'–'}</td>
+      <td style="max-width:180px">${r.problemDetail||'–'}${isOd?'<div class="overdue-badge">ต้องปิดงาน/ติดตามด่วน</div>':''}</td>
       <td class="${uCls}">${r.urgencyLevel||'–'}</td>
       <td><span class="badge ${sCls}">${r.status||'–'}</span></td>
       <td>${mBtn}</td>
@@ -1076,6 +1136,7 @@ async function loadAdminAll() {
   drawAdminTable();
   drawBranchTable();
   drawZoneList();
+  showOverduePopup('admin');
 }
 
 function switchTab(name, btn) {
@@ -1210,14 +1271,17 @@ function drawAdminTable() {
     const uCls = r.urgencyLevel==='สูง'?'u-h':r.urgencyLevel==='ปานกลาง'?'u-m':'u-l';
     const sCls = r.status==='กำลังดำเนินการ'?'b-prog':r.status==='เสร็จสิ้น'?'b-done':'b-pend';
     const mBtn = r.media&&r.media.length?`<button class="btn btn-s btn-sm" onclick="openMedia('${r.id}')">📎(${r.media.length})</button>`:'–';
+    const isOd = isOverdueRepair(r);
+    const odBadge = overdueBadge(r);
     const tr = document.createElement('tr');
+    if(isOd) tr.classList.add('overdue-row');
     tr.innerHTML = `
-      <td style="white-space:nowrap;font-size:12px">${fmtDate(r.date)}</td>
+      <td style="white-space:nowrap;font-size:12px"><div class="overdue-inline"><span>${fmtDate(r.date)}</span>${odBadge}</div></td>
       <td><span class="badge b-zone">${r.zone||'–'}</span></td>
       <td><strong>${r.branch||'–'}</strong></td>
       <td>${r.reporterName||'–'}</td>
       <td>${r.repairType||'–'}</td>
-      <td style="max-width:160px">${r.problemDetail||'–'}</td>
+      <td style="max-width:160px">${r.problemDetail||'–'}${isOd?'<div class="overdue-badge">ต้องปิดงาน/ติดตามด่วน</div>':''}</td>
       <td class="${uCls}">${r.urgencyLevel||'–'}</td>
       <td><span class="badge ${sCls}">${r.status||'–'}</span></td>
       <td>${mBtn}</td>
