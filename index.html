@@ -329,7 +329,7 @@ table.t tr:hover td{background:var(--bg)}
         <option value="กำลังดำเนินการ">กำลังดำเนินการ</option>
         <option value="เสร็จสิ้น">เสร็จสิ้น</option>
       </select>
-      <button class="btn btn-s btn-sm" onclick="loadTechView()">🔄 รีเฟรช</button>
+      <button class="btn btn-s btn-sm" onclick="refreshTech(this)()">🔄 รีเฟรช</button>
     </div>
     <div class="tscroll">
       <table class="t">
@@ -982,13 +982,13 @@ function fmtDate(s) {
 // ============================================================
 // TECH VIEW
 // ============================================================
-async function loadTechView() {
-  await syncRepairs();
-  await syncBranches();
-  await syncZones();
-  fillDropdowns();
-  drawTechStats();
-  drawTechTable();
+async function refreshTech(btn) {
+  if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังโหลด...'; }
+  try {
+    await loadTechView();
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='🔄 รีเฟรช'; }
+  }
 }
 
 function drawTechStats() {
