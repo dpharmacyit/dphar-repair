@@ -363,6 +363,7 @@ table.t tr:hover td{background:var(--bg)}
       <button class="tb" onclick="switchTab('list',this)">🔧 รายการซ่อม</button>
       <button class="tb" onclick="switchTab('branch',this)">🏢 สาขา</button>
       <button class="tb" onclick="switchTab('zone',this)">🗺️ โซน</button>
+      <button class="tb" onclick="switchTab('type',this)">🛠️ ประเภทซ่อม</button>
       <button class="tb" onclick="switchTab('print',this)">🖨️ ปริ้น</button>
     </div>
 
@@ -455,6 +456,18 @@ table.t tr:hover td{background:var(--bg)}
         <button class="btn btn-g" onclick="addZone()">+ เพิ่ม</button>
       </div>
       <div id="znBody"></div>
+    </div>
+
+    <!-- REPAIR TYPE -->
+    <div id="tab-type" class="tc">
+      <div class="alert alert-ok" style="margin-bottom:14px">
+        ✅ เพิ่ม/ลบประเภทการซ่อมจากตรงนี้ได้เลย ระบบจะนำไปใช้ที่หน้าแจ้งซ่อม, ตัวกรอง Admin และหน้าแก้ไขรายการอัตโนมัติ
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <input id="nTpN" placeholder="เช่น ระบบคอมพิวเตอร์, กล้องวงจรปิด, Internet" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:8px">
+        <button class="btn btn-g" onclick="addRepairType()">+ เพิ่ม</button>
+      </div>
+      <div id="tpBody"></div>
     </div>
 
     <!-- PRINT -->
@@ -553,6 +566,7 @@ const DEF_BRANCHES = [
   {id:'b4',name:'สาขาเซ็นทรัลบางนา',             zone:'กรุงเทพ'},
   {id:'b5',name:'สาขาเซ็นทรัลลาดพร้าว',          zone:'กรุงเทพ'},
 ];
+const DEF_REPAIR_TYPES = ['ระบบไฟฟ้า','ระบบประปา','เครื่องปรับอากาศ','ป้าย,ม่านบังแดด','อาคารสถานที่','อื่นๆ'];
 
 // ============================================================
 // LOCAL STORAGE
@@ -565,6 +579,7 @@ const S = {
 const getRepairs  = () => S.get('repairs')  || [];
 const getBranches = () => S.get('branches') || DEF_BRANCHES;
 const getZones    = () => S.get('zones')    || DEF_ZONES;
+const getRepairTypes = () => S.get('repairTypes') || DEF_REPAIR_TYPES;
 
 // ============================================================
 // API LAYER
@@ -698,8 +713,11 @@ function logout() {
 function fillDropdowns() {
   const br = getBranches();
   const zn = getZones();
+  const tp = getRepairTypes();
 
   fillSel('fBranch', br.map(b=>({v:b.name,t:b.name,z:b.zone||''})), '-- เลือกสาขา --', true);
+  fillSel('fType', tp.map(t=>({v:t,t:t})), '-- เลือกประเภท --');
+  fillSel('atF', tp.map(t=>({v:t,t:t})), 'ทุกประเภท');
   fillSel('tzF', zn.map(z=>({v:z,t:z})), 'ทุกโซน');
   fillSel('tbF', br.map(b=>({v:b.name,t:b.name})), 'ทุกสาขา');
   fillSel('azF', zn.map(z=>({v:z,t:z})), 'ทุกโซน');
@@ -1035,9 +1053,13 @@ function showOverduePopup(viewName) {
   document.body.appendChild(modal);
 }
 async function refreshTech(btn) {
-  if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังโหลด...'; }
+  if(btn){ btn.disabled=true; btn.textContent='⏳ กำลังรีเฟรช...'; }
   try {
-    await loadTechView();
+    // Fast refresh for MA: ดึงเฉพาะรายการซ่อม ไม่โหลดสาขา/โซนซ้ำทุกครั้ง
+    await syncRepairs();
+    drawTechStats();
+    drawTechTable();
+    showOverduePopup('tech');
   } finally {
     if(btn){ btn.disabled=false; btn.textContent='🔄 รีเฟรช'; }
   }
@@ -1067,23 +1089,31 @@ function drawTechTable() {
   const zF = document.getElementById('tzF').value;
   const bF = document.getElementById('tbF').value;
   const sF = document.getElementById('tsF').value;
-  let rows = getRepairs();
+  const MAX_TECH_ROWS = 80; // จำกัดแถวที่ render เพื่อให้หน้า MA ลื่นขึ้น โดยเฉพาะมือถือ
+
+  let rows = getRepairs().map(r => ({...r, _ts: parseDate(r.date).getTime() || 0}));
   if(!sF) rows = rows.filter(r => r.status !== 'เสร็จสิ้น');
   if(zF) rows = rows.filter(r=>r.zone===zF);
   if(bF) rows = rows.filter(r=>r.branch===bF);
   if(sF) rows = rows.filter(r=>r.status===sF);
 
-  // Sort by urgency then date desc
+  // Sort แบบเบาขึ้น: ใช้ timestamp ที่คำนวณครั้งเดียว แทน parseDate ซ้ำใน comparator
+  const urgentRank = {สูง:0, ปานกลาง:1, ต่ำ:2};
   rows.sort((a,b) => {
-    const ua = ({สูง:0,ปานกลาง:1,ต่ำ:2}[a.urgencyLevel] ?? 3);
-    const ub = ({สูง:0,ปานกลาง:1,ต่ำ:2}[b.urgencyLevel] ?? 3);
+    const ua = urgentRank[a.urgencyLevel] ?? 3;
+    const ub = urgentRank[b.urgencyLevel] ?? 3;
     if(ua !== ub) return ua - ub;
-    return parseDate(b.date) - parseDate(a.date);
+    return b._ts - a._ts;
   });
+
+  const totalRows = rows.length;
+  rows = rows.slice(0, MAX_TECH_ROWS);
 
   const tb = document.getElementById('tBody');
   tb.innerHTML = '';
   if(!rows.length) { tb.innerHTML = '<tr><td colspan="11" class="empty">ไม่มีรายการ</td></tr>'; return; }
+
+  const frag = document.createDocumentFragment();
 
   rows.forEach(r => {
     const uCls = r.urgencyLevel==='สูง'?'u-h':r.urgencyLevel==='ปานกลาง'?'u-m':'u-l';
@@ -1102,8 +1132,10 @@ function drawTechTable() {
       ctrl = `<select onchange="updateStatus('${r.id}',this.value,'tech')" style="padding:6px;font-size:13px;width:100%">
         <option value="">– เลือก –</option>${opts}</select>`;
     }
+
+    // ทำให้เบาขึ้น: ไม่สร้าง textarea ทุกแถวตั้งแต่แรก ใช้ input ธรรมดาแบบซ่อนได้/เบากว่า
     const note = r.status!=='เสร็จสิ้น'
-      ? `<textarea id="note_${r.id}" style="width:100%;padding:5px;font-size:12px;min-height:40px" placeholder="หมายเหตุ..."></textarea>`
+      ? `<input id="note_${r.id}" style="width:100%;padding:6px;font-size:12px;border:1px solid var(--border);border-radius:6px" placeholder="หมายเหตุ...">`
       : '–';
 
     const tr = document.createElement('tr');
@@ -1120,8 +1152,16 @@ function drawTechTable() {
       <td>${mBtn}</td>
       <td style="min-width:150px">${ctrl}</td>
       <td style="min-width:130px">${note}</td>`;
-    tb.appendChild(tr);
+    frag.appendChild(tr);
   });
+
+  tb.appendChild(frag);
+
+  if(totalRows > MAX_TECH_ROWS) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="11" class="empty" style="padding:14px">แสดง ${MAX_TECH_ROWS} รายการล่าสุดจากทั้งหมด ${totalRows} รายการ — ใช้ตัวกรองโซน/สาขา/สถานะเพื่อค้นหาเพิ่มเติม</td>`;
+    tb.appendChild(tr);
+  }
 }
 
 // ============================================================
@@ -1136,6 +1176,7 @@ async function loadAdminAll() {
   drawAdminTable();
   drawBranchTable();
   drawZoneList();
+  drawTypeList();
   showOverduePopup('admin');
 }
 
@@ -1148,6 +1189,7 @@ function switchTab(name, btn) {
   if(name==='list')   drawAdminTable();
   if(name==='branch') drawBranchTable();
   if(name==='zone')   drawZoneList();
+  if(name==='type')   drawTypeList();
 }
 
 // DASHBOARD
@@ -1332,7 +1374,7 @@ function editRepair(id) {
   if(!r){ alert('ไม่พบรายการ'); return; }
   const branches = getBranches();
   const bOpts = branches.map(b=>`<option value="${b.name}" data-zone="${b.zone||''}" ${b.name===r.branch?'selected':''}>${b.name}</option>`).join('');
-  const types = ['ระบบไฟฟ้า','ระบบประปา','เครื่องปรับอากาศ','ป้าย,ม่านบังแดด','อาคารสถานที่','อื่นๆ'];
+  const types = getRepairTypes();
   const tOpts = types.map(t=>`<option value="${t}" ${t===r.repairType?'selected':''}>${t}</option>`).join('');
 
   const m = mkModal('✏️ แก้ไขรายการ', `
@@ -1383,6 +1425,85 @@ async function delRepair(id) {
   apiPost('deleteRepair', {id}).catch(()=>{});
   drawAdminTable();
   drawDash();
+}
+
+
+// REPAIR TYPES
+function drawTypeList() {
+  const box = document.getElementById('tpBody');
+  if(!box) return;
+  const types = getRepairTypes();
+  box.innerHTML = '';
+  if(!types.length) {
+    box.innerHTML = '<div class="empty">ยังไม่มีประเภทการซ่อม</div>';
+    return;
+  }
+  types.forEach((name, i) => {
+    const div = document.createElement('div');
+    div.className = 'li';
+    div.innerHTML = `<div><strong>${name}</strong></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-y btn-sm" onclick="editRepairType(${i})">✏️ แก้ไข</button>
+        <button class="btn btn-r btn-sm" onclick="delRepairType(${i})">🗑️ ลบ</button>
+      </div>`;
+    box.appendChild(div);
+  });
+}
+
+function saveRepairTypes(types) {
+  const clean = [...new Set(types.map(t => String(t).trim()).filter(Boolean))];
+  S.set('repairTypes', clean);
+  fillDropdowns();
+  drawTypeList();
+  drawDash();
+  drawAdminTable();
+}
+
+function addRepairType() {
+  const el = document.getElementById('nTpN');
+  const name = el.value.trim();
+  if(!name) { alert('⚠️ กรุณากรอกชื่อประเภทการซ่อม'); return; }
+  const types = getRepairTypes();
+  if(types.includes(name)) { alert('⚠️ มีประเภทนี้อยู่แล้ว'); return; }
+  types.push(name);
+  saveRepairTypes(types);
+  el.value = '';
+  alert('✅ เพิ่มประเภทการซ่อมสำเร็จ');
+}
+
+function editRepairType(i) {
+  const types = getRepairTypes();
+  const oldName = types[i];
+  const name = prompt('แก้ไขชื่อประเภทการซ่อม', oldName);
+  if(name === null) return;
+  const newName = name.trim();
+  if(!newName) { alert('⚠️ ชื่อประเภทห้ามว่าง'); return; }
+  if(newName !== oldName && types.includes(newName)) { alert('⚠️ มีประเภทนี้อยู่แล้ว'); return; }
+
+  types[i] = newName;
+
+  // อัปเดตรายการซ่อมเก่าที่ใช้ชื่อประเภทเดิม ให้เปลี่ยนตามด้วย
+  const repairs = getRepairs();
+  repairs.forEach(r => {
+    if(r.repairType === oldName) r.repairType = newName;
+  });
+  S.set('repairs', repairs);
+
+  saveRepairTypes(types);
+  alert('✅ แก้ไขประเภทการซ่อมสำเร็จ');
+}
+
+function delRepairType(i) {
+  const types = getRepairTypes();
+  const name = types[i];
+  const used = getRepairs().some(r => r.repairType === name);
+  const msg = used
+    ? `⚠️ ประเภท "${name}" มีรายการซ่อมใช้งานอยู่\nถ้าลบ ประเภทนี้จะหายจากตัวเลือกใหม่ แต่รายการเก่ายังเก็บชื่อเดิมไว้\n\nต้องการลบไหม?`
+    : `ลบประเภท "${name}" ?`;
+  if(!confirm(msg)) return;
+  types.splice(i, 1);
+  saveRepairTypes(types);
+  alert('✅ ลบประเภทการซ่อมแล้ว');
 }
 
 // BRANCHES
