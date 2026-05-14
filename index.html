@@ -622,7 +622,16 @@ async function apiPost(action, data) {
 // ============================================================
 // SYNC FUNCTIONS — Sheets ⇄ localStorage
 // ============================================================
-async function syncRepairs() {
+
+// Cache TTL: ไม่ sync ซ้ำถ้าเพิ่ง sync ไปน้อยกว่า 2 นาที
+const SYNC_TTL_MS = 2 * 60 * 1000;
+let lastSyncTime = 0;
+
+async function syncRepairs(force = false) {
+  const now = Date.now();
+  if(!force && now - lastSyncTime < SYNC_TTL_MS) {
+    return getRepairs(); // ใช้ cache ที่มีอยู่แล้ว
+  }
   const sheet = await apiGet('repairs');
   if(sheet && Array.isArray(sheet) && sheet.length > 0) {
     // เก็บ media local (base64) ของรายการที่ตรงกัน (กรณี upload offline)
@@ -635,6 +644,7 @@ async function syncRepairs() {
       return r;
     });
     S.set('repairs', merged);
+    lastSyncTime = Date.now();
     return merged;
   }
   return getRepairs();
@@ -1292,8 +1302,12 @@ function buildPie(id, data, field, labels, colors) {
   if(id==='cStat') chartStat=chart; else chartTyp=chart;
 }
 
-// ADMIN TABLE
-function drawAdminTable() {
+// ADMIN TABLE with Pagination
+let adminPage = 0;
+const ADMIN_PAGE_SIZE = 50;
+
+function drawAdminTable(resetPage = true) {
+  if(resetPage) adminPage = 0;
   const zF = document.getElementById('azF').value;
   const bF = document.getElementById('abF').value;
   const sF = document.getElementById('asF').value;
@@ -1304,11 +1318,18 @@ function drawAdminTable() {
   if(sF) rows = rows.filter(r=>r.status===sF);
   if(tF) rows = rows.filter(r=>r.repairType===tF);
 
+  const total     = rows.length;
+  const totalPages = Math.ceil(total / ADMIN_PAGE_SIZE) || 1;
+  if(adminPage >= totalPages) adminPage = totalPages - 1;
+
+  const start = adminPage * ADMIN_PAGE_SIZE;
+  const pageRows = rows.slice(start, start + ADMIN_PAGE_SIZE);
+
   const tb = document.getElementById('aBody');
   tb.innerHTML = '';
-  if(!rows.length) { tb.innerHTML = '<tr><td colspan="12" class="empty">ไม่มีรายการ</td></tr>'; return; }
+  if(!rows.length) { tb.innerHTML = '<tr><td colspan="12" class="empty">ไม่มีรายการ</td></tr>'; renderAdminPager(0,1); return; }
 
-  rows.forEach(r => {
+  pageRows.forEach(r => {
     const uCls = r.urgencyLevel==='สูง'?'u-h':r.urgencyLevel==='ปานกลาง'?'u-m':'u-l';
     const sCls = r.status==='กำลังดำเนินการ'?'b-prog':r.status==='เสร็จสิ้น'?'b-done':'b-pend';
     const mBtn = r.media&&r.media.length?`<button class="btn btn-s btn-sm" onclick="openMedia('${r.id}')">📎(${r.media.length})</button>`:'–';
@@ -1338,6 +1359,29 @@ function drawAdminTable() {
       </td>`;
     tb.appendChild(tr);
   });
+  renderAdminPager(total, totalPages);
+}
+
+function renderAdminPager(total, totalPages) {
+  let el = document.getElementById('adminPager');
+  if(!el) {
+    el = document.createElement('div');
+    el.id = 'adminPager';
+    el.style = 'display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px;font-size:14px';
+    document.getElementById('aBody').closest('table').after(el);
+  }
+  if(total === 0) { el.innerHTML=''; return; }
+  const start = adminPage * ADMIN_PAGE_SIZE + 1;
+  const end   = Math.min((adminPage + 1) * ADMIN_PAGE_SIZE, total);
+  el.innerHTML = `
+    <span style="color:var(--text-soft)">แสดง ${start}–${end} จาก ${total} รายการ</span>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="btn btn-s btn-sm" onclick="adminPage=0;drawAdminTable(false)" ${adminPage===0?'disabled':''}>«</button>
+      <button class="btn btn-s btn-sm" onclick="adminPage--;drawAdminTable(false)" ${adminPage===0?'disabled':''}>‹ ก่อนหน้า</button>
+      <span style="padding:6px 12px;background:var(--primary-light);color:var(--primary);border-radius:6px;font-weight:600">${adminPage+1} / ${totalPages}</span>
+      <button class="btn btn-s btn-sm" onclick="adminPage++;drawAdminTable(false)" ${adminPage>=totalPages-1?'disabled':''}>ถัดไป ›</button>
+      <button class="btn btn-s btn-sm" onclick="adminPage=${totalPages-1};drawAdminTable(false)" ${adminPage>=totalPages-1?'disabled':''}>»</button>
+    </div>`;
 }
 
 // UPDATE STATUS
