@@ -1102,11 +1102,8 @@ function drawTechTable() {
   // Sort แบบเบาขึ้น: ใช้ timestamp ที่คำนวณครั้งเดียว แทน parseDate ซ้ำใน comparator
   const urgentRank = {สูง:0, ปานกลาง:1, ต่ำ:2};
   rows.sort((a,b) => {
-    const ua = urgentRank[a.urgencyLevel] ?? 3;
-    const ub = urgentRank[b.urgencyLevel] ?? 3;
-    if(ua !== ub) return ua - ub;
-    return b._ts - a._ts;
-  });
+   return parseDate(b.date) - parseDate(a.date);
+});
 
   const totalRows = rows.length;
   rows = rows.slice(0, MAX_TECH_ROWS);
