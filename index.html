@@ -268,7 +268,7 @@ table.t tr:hover td{background:var(--bg)}
       </div>
       <div class="fg">
         <label>รายละเอียดปัญหา *</label>
-        <textarea id="fDetail" required placeholder="อธิบายปัญหา เช่น ไฟดับ, แอร์ไม่เย็น, ท่อน้ำแตก..."></textarea>
+        <textarea id="fDetail" required placeholder="อธิบายปัญหา เช่น ไฟดับ, แอร์ไม่เย็น, ท่อน้ำแตก..." onkeydown="if(event.key==='Enter'){event.preventDefault();}"></textarea>
       </div>
       <div class="fg">
         <label>📎 รูปภาพ / วิดีโอ (ไม่บังคับ)</label>
